@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Playground</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Status Bar -->
+  <header class="status-bar">
+    <div class="status-bar-left">
+      <span class="logo">AI Playground</span>
+    </div>
+    <div class="status-bar-right">
+      <div class="status-indicator" id="ollama-status">
+        <span class="status-dot"></span>
+        <span class="status-label">Ollama</span>
+      </div>
+      <div class="status-indicator" id="comfyui-status">
+        <span class="status-dot"></span>
+        <span class="status-label">ComfyUI</span>
+      </div>
+      <div class="vram-bar" id="vram-bar" title="VRAM Usage">
+        <div class="vram-fill"></div>
+        <span class="vram-text">-- GB</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <button class="nav-btn active" data-tab="chat">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Chat</span>
+      </button>
+      <button class="nav-btn" data-tab="image">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+        <span>Image</span>
+      </button>
+      <button class="nav-btn" data-tab="video">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <span>Video</span>
+      </button>
+      <button class="nav-btn" data-tab="models">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+        <span>Models</span>
+      </button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Chat Tab -->
+      <div class="tab-panel active" id="tab-chat">
+        <div class="chat-layout">
+          <!-- Conversation Sidebar -->
+          <div class="conv-sidebar">
+            <button class="btn btn-primary btn-new-chat" id="btn-new-chat">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Chat
+            </button>
+            <div class="conv-list" id="conv-list"></div>
+          </div>
+          <!-- Chat Area -->
+          <div class="chat-area">
+            <div class="chat-header">
+              <select class="select model-select" id="chat-model-select">
+                <option value="">Loading models...</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" id="btn-system-prompt" title="System Prompt">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </button>
+              <button class="btn btn-ghost btn-sm" id="btn-chat-settings" title="Chat Settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m5.66-14.66l-4.24 4.24m-2.83 2.83l-4.24 4.24M23 12h-6m-6 0H5m14.66 5.66l-4.24-4.24m-2.83-2.83L7.34 6.34"/></svg>
+              </button>
+            </div>
+            <!-- System prompt editor (hidden by default) -->
+            <div class="system-prompt-editor hidden" id="system-prompt-editor">
+              <textarea class="textarea" id="system-prompt-input" placeholder="Enter a system prompt to set the AI's behavior..." rows="3"></textarea>
+            </div>
+            <!-- Chat settings panel (hidden by default) -->
+            <div class="chat-settings hidden" id="chat-settings-panel">
+              <div class="settings-row">
+                <label>Temperature</label>
+                <input type="range" id="chat-temperature" min="0" max="2" step="0.1" value="0.7" class="range">
+                <span class="range-value" id="chat-temp-value">0.7</span>
+              </div>
+              <div class="settings-row">
+                <label>Think mode</label>
+                <label class="toggle"><input type="checkbox" id="chat-think"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="settings-row">
+                <label>JSON output</label>
+                <label class="toggle"><input type="checkbox" id="chat-json"><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <!-- Messages -->
+            <div class="messages" id="messages">
+              <div class="welcome-message" id="welcome-message">
+                <h2>AI Playground</h2>
+                <p>Select a model and start chatting. Your conversations are saved automatically.</p>
+              </div>
+            </div>
+            <!-- Input -->
+            <div class="chat-input-area">
+              <textarea class="textarea chat-input" id="chat-input" placeholder="Type a message... (Shift+Enter for newline)" rows="1"></textarea>
+              <button class="btn btn-accent btn-send" id="btn-send" title="Send (Enter)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+              <button class="btn btn-danger btn-stop hidden" id="btn-stop" title="Stop generation">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Image Tab -->
+      <div class="tab-panel" id="tab-image">
+        <div class="gen-layout">
+          <div class="gen-controls">
+            <h3>Image Generation</h3>
+            <div class="control-group">
+              <label>Prompt</label>
+              <textarea class="textarea" id="img-prompt" rows="4" placeholder="Describe the image you want to create..."></textarea>
+            </div>
+            <div class="control-row">
+              <div class="control-group">
+                <label>Size</label>
+                <select class="select" id="img-size">
+                  <option value="512x512">512 x 512</option>
+                  <option value="768x768">768 x 768</option>
+                  <option value="1024x768" selected>1024 x 768</option>
+                  <option value="1024x1024">1024 x 1024</option>
+                  <option value="1024x1536">1024 x 1536</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label>Steps</label>
+                <input type="number" class="input" id="img-steps" value="20" min="1" max="50">
+              </div>
+            </div>
+            <div class="control-row">
+              <div class="control-group">
+                <label>CFG</label>
+                <input type="number" class="input" id="img-cfg" value="3.5" min="1" max="20" step="0.5">
+              </div>
+              <div class="control-group">
+                <label>Seed</label>
+                <input type="number" class="input" id="img-seed" placeholder="Random" min="0">
+              </div>
+            </div>
+            <button class="btn btn-accent btn-generate" id="btn-gen-image">Generate Image</button>
+            <div class="gen-progress hidden" id="img-progress">
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <span class="progress-text">Generating...</span>
+            </div>
+          </div>
+          <div class="gen-gallery" id="img-gallery">
+            <div class="gallery-empty">No images generated yet. Write a prompt and click Generate.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Tab -->
+      <div class="tab-panel" id="tab-video">
+        <div class="gen-layout">
+          <div class="gen-controls">
+            <h3>Video Generation</h3>
+            <div class="control-group">
+              <label>Prompt</label>
+              <textarea class="textarea" id="vid-prompt" rows="4" placeholder="Describe the video clip you want to create..."></textarea>
+            </div>
+            <div class="control-row">
+              <div class="control-group">
+                <label>Resolution</label>
+                <select class="select" id="vid-size">
+                  <option value="512x320" selected>512 x 320 (fast)</option>
+                  <option value="640x480">640 x 480</option>
+                  <option value="768x512">768 x 512</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <label>Frames</label>
+                <select class="select" id="vid-frames">
+                  <option value="25">25 (~3s)</option>
+                  <option value="37" selected>37 (~5s)</option>
+                  <option value="49">49 (~6s)</option>
+                </select>
+              </div>
+            </div>
+            <div class="control-row">
+              <div class="control-group">
+                <label>Steps</label>
+                <input type="number" class="input" id="vid-steps" value="20" min="1" max="50">
+              </div>
+              <div class="control-group">
+                <label>Seed</label>
+                <input type="number" class="input" id="vid-seed" placeholder="Random" min="0">
+              </div>
+            </div>
+            <button class="btn btn-accent btn-generate" id="btn-gen-video">Generate Video</button>
+            <div class="gen-progress hidden" id="vid-progress">
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <span class="progress-text">Generating...</span>
+            </div>
+          </div>
+          <div class="gen-gallery" id="vid-gallery">
+            <div class="gallery-empty">No videos generated yet. Write a prompt and click Generate.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Models Tab -->
+      <div class="tab-panel" id="tab-models">
+        <div class="models-layout">
+          <!-- GPU Status -->
+          <div class="card gpu-card" id="gpu-card">
+            <h3>GPU Status</h3>
+            <div class="gpu-info">
+              <div class="gpu-stat">
+                <span class="gpu-label">GPU</span>
+                <span class="gpu-value" id="gpu-name">--</span>
+              </div>
+              <div class="gpu-stat">
+                <span class="gpu-label">VRAM</span>
+                <div class="vram-bar-large">
+                  <div class="vram-fill" id="gpu-vram-fill"></div>
+                </div>
+                <span class="gpu-value" id="gpu-vram-text">-- / -- GB</span>
+              </div>
+              <div class="gpu-stat">
+                <span class="gpu-label">ComfyUI</span>
+                <span class="gpu-value" id="gpu-comfyui-version">--</span>
+              </div>
+              <div class="gpu-stat">
+                <span class="gpu-label">Loaded</span>
+                <span class="gpu-value" id="gpu-loaded-models">None</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pull Model -->
+          <div class="card">
+            <h3>Pull Model</h3>
+            <div class="pull-row">
+              <input type="text" class="input" id="pull-model-name" placeholder="e.g. llama3:8b, deepseek-coder:6.7b">
+              <button class="btn btn-accent" id="btn-pull-model">Pull</button>
+            </div>
+            <div class="pull-progress hidden" id="pull-progress">
+              <div class="progress-bar"><div class="progress-fill" id="pull-progress-fill"></div></div>
+              <span class="progress-text" id="pull-progress-text">Downloading...</span>
+            </div>
+          </div>
+
+          <!-- Installed Models -->
+          <div class="card">
+            <h3>Installed Models</h3>
+            <table class="models-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Size</th>
+                  <th>Params</th>
+                  <th>Quantization</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="models-table-body">
+                <tr><td colspan="5" class="table-empty">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- ComfyUI Models -->
+          <div class="card">
+            <h3>ComfyUI Models</h3>
+            <div id="comfyui-models-list" class="comfyui-models">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Lightbox -->
+  <div class="lightbox hidden" id="lightbox">
+    <button class="lightbox-close" id="lightbox-close">&times;</button>
+    <img class="lightbox-img" id="lightbox-img" src="" alt="">
+    <div class="lightbox-info" id="lightbox-info"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/chat.js"></script>
+  <script src="/js/image.js"></script>
+  <script src="/js/video.js"></script>
+  <script src="/js/models.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

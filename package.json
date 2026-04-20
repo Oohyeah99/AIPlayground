@@ -1,0 +1,16 @@
+{
+  "name": "ai-playground",
+  "version": "1.0.0",
+  "description": "Unified AI interface for all open-source models on the office 4090 GPU",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
