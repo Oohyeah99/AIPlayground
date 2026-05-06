@@ -29,6 +29,7 @@
         <div class="vram-fill"></div>
         <span class="vram-text">-- GB</span>
       </div>
+      <button class="btn-vram-free" id="btn-vram-free" title="Unload ComfyUI models from VRAM">Free VRAM</button>
     </div>
   </header>
 
@@ -47,9 +48,13 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
         <span>Video</span>
       </button>
-      <button class="nav-btn" data-tab="models">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
-        <span>Models</span>
+      <button class="nav-btn" data-tab="audio">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Audio</span>
+      </button>
+      <button class="nav-btn" data-tab="settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
       </button>
     </nav>
 
@@ -72,6 +77,10 @@
               <select class="select model-select" id="chat-model-select">
                 <option value="">Loading models...</option>
               </select>
+              <button class="btn btn-primary btn-sm" id="btn-compare-mode" title="Compare Models">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+                Compare
+              </button>
               <button class="btn btn-ghost btn-sm" id="btn-system-prompt" title="System Prompt">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               </button>
@@ -106,15 +115,62 @@
                 <p>Select a model and start chatting. Your conversations are saved automatically.</p>
               </div>
             </div>
+            <!-- Compare Mode Overlay (hidden by default) -->
+            <div class="compare-overlay hidden" id="compare-overlay">
+              <div class="compare-layout">
+                <div class="compare-controls">
+                  <div class="compare-header">
+                    <h3>Compare Models</h3>
+                    <button class="btn btn-ghost btn-sm" id="btn-compare-close" title="Back to Chat">&times;</button>
+                  </div>
+                  <div class="control-group">
+                    <label>Select Models (2+)</label>
+                    <div class="compare-model-list" id="compare-model-list">Loading...</div>
+                  </div>
+                  <div class="control-group">
+                    <label>System Prompt (optional)</label>
+                    <textarea class="textarea" id="compare-system-prompt" rows="2" placeholder="Shared system prompt..."></textarea>
+                  </div>
+                  <div class="control-group">
+                    <label>Temperature</label>
+                    <div class="settings-row">
+                      <input type="range" id="compare-temperature" min="0" max="2" step="0.1" value="0.7" class="range">
+                      <span class="range-value" id="compare-temp-value">0.7</span>
+                    </div>
+                  </div>
+                  <div class="control-group">
+                    <label>Prompt</label>
+                    <textarea class="textarea" id="compare-prompt" rows="4" placeholder="Enter a prompt to send to all selected models..."></textarea>
+                  </div>
+                  <div class="compare-actions">
+                    <button class="btn btn-accent" id="btn-compare">Compare</button>
+                    <button class="btn btn-danger hidden" id="btn-compare-stop">Stop All</button>
+                  </div>
+                </div>
+                <div class="compare-results">
+                  <div class="compare-tabs" id="compare-tabs"></div>
+                  <div class="compare-output" id="compare-output">
+                    <div class="gallery-empty">Select 2+ models, write a prompt, and click Compare.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <!-- Input -->
             <div class="chat-input-area">
-              <textarea class="textarea chat-input" id="chat-input" placeholder="Type a message... (Shift+Enter for newline)" rows="1"></textarea>
-              <button class="btn btn-accent btn-send" id="btn-send" title="Send (Enter)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              </button>
-              <button class="btn btn-danger btn-stop hidden" id="btn-stop" title="Stop generation">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
-              </button>
+              <div class="attachment-preview hidden" id="attachment-preview"></div>
+              <div class="chat-input-row">
+                <input type="file" id="file-input" class="hidden" multiple accept="image/*,.pdf,.doc,.docx,.txt,.md">
+                <button class="btn btn-ghost btn-attach" id="btn-attach" title="Attach files (images, PDFs, docs)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <textarea class="textarea chat-input" id="chat-input" placeholder="Type a message... (Shift+Enter for newline)" rows="1"></textarea>
+                <button class="btn btn-accent btn-send" id="btn-send" title="Send (Enter)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+                <button class="btn btn-danger btn-stop hidden" id="btn-stop" title="Stop generation">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -126,33 +182,57 @@
           <div class="gen-controls">
             <h3>Image Generation</h3>
             <div class="control-group">
+              <label>Provider / Model</label>
+              <select class="select" id="img-provider">
+                <option value="flux-dev">Flux Dev (ComfyUI)</option>
+                <option value="ernie-turbo">ERNIE-Image Turbo (ComfyUI)</option>
+                <option value="imagen-fast">Imagen 4.0 Fast (API)</option>
+                <option value="imagen">Imagen 4.0 (API)</option>
+                <option value="imagen-ultra">Imagen 4.0 Ultra (API)</option>
+              </select>
+            </div>
+            <div class="control-group">
               <label>Prompt</label>
               <textarea class="textarea" id="img-prompt" rows="4" placeholder="Describe the image you want to create..."></textarea>
             </div>
-            <div class="control-row">
-              <div class="control-group">
-                <label>Size</label>
-                <select class="select" id="img-size">
-                  <option value="512x512">512 x 512</option>
-                  <option value="768x768">768 x 768</option>
-                  <option value="1024x768" selected>1024 x 768</option>
-                  <option value="1024x1024">1024 x 1024</option>
-                  <option value="1024x1536">1024 x 1536</option>
-                </select>
+            <div id="comfyui-img-controls">
+              <div class="control-row">
+                <div class="control-group">
+                  <label>Size</label>
+                  <select class="select" id="img-size">
+                    <option value="512x512">512 x 512</option>
+                    <option value="768x768">768 x 768</option>
+                    <option value="1024x768" selected>1024 x 768</option>
+                    <option value="1024x1024">1024 x 1024</option>
+                    <option value="1024x1536">1024 x 1536</option>
+                  </select>
+                </div>
+                <div class="control-group">
+                  <label>Steps</label>
+                  <input type="number" class="input" id="img-steps" value="20" min="1" max="50">
+                </div>
               </div>
-              <div class="control-group">
-                <label>Steps</label>
-                <input type="number" class="input" id="img-steps" value="20" min="1" max="50">
+              <div class="control-row">
+                <div class="control-group">
+                  <label>CFG</label>
+                  <input type="number" class="input" id="img-cfg" value="3.5" min="1" max="20" step="0.5">
+                </div>
+                <div class="control-group">
+                  <label>Seed</label>
+                  <input type="number" class="input" id="img-seed" placeholder="Random" min="0">
+                </div>
               </div>
             </div>
-            <div class="control-row">
+            <div id="api-img-controls" class="hidden">
               <div class="control-group">
-                <label>CFG</label>
-                <input type="number" class="input" id="img-cfg" value="3.5" min="1" max="20" step="0.5">
-              </div>
-              <div class="control-group">
-                <label>Seed</label>
-                <input type="number" class="input" id="img-seed" placeholder="Random" min="0">
+                <label>Aspect Ratio</label>
+                <select class="select" id="img-aspect-ratio">
+                  <option value="1:1">1:1 (Square)</option>
+                  <option value="4:3">4:3 (Landscape)</option>
+                  <option value="3:4">3:4 (Portrait)</option>
+                  <option value="16:9" selected>16:9 (Wide)</option>
+                  <option value="9:16">9:16 (Tall)</option>
+                </select>
               </div>
             </div>
             <button class="btn btn-accent btn-generate" id="btn-gen-image">Generate Image</button>
@@ -173,35 +253,65 @@
           <div class="gen-controls">
             <h3>Video Generation</h3>
             <div class="control-group">
+              <label>Provider / Model</label>
+              <select class="select" id="vid-provider">
+                <option value="hunyuan-video">HunyuanVideo (ComfyUI)</option>
+                <option value="veo-lite">Veo 3.1 Lite (API)</option>
+                <option value="veo-fast">Veo 3.1 Fast (API)</option>
+                <option value="veo">Veo 3.1 (API)</option>
+              </select>
+            </div>
+            <div class="control-group">
               <label>Prompt</label>
               <textarea class="textarea" id="vid-prompt" rows="4" placeholder="Describe the video clip you want to create..."></textarea>
             </div>
-            <div class="control-row">
-              <div class="control-group">
-                <label>Resolution</label>
-                <select class="select" id="vid-size">
-                  <option value="512x320" selected>512 x 320 (fast)</option>
-                  <option value="640x480">640 x 480</option>
-                  <option value="768x512">768 x 512</option>
-                </select>
+            <div id="comfyui-vid-controls">
+              <div class="control-row">
+                <div class="control-group">
+                  <label>Resolution</label>
+                  <select class="select" id="vid-size">
+                    <option value="512x320" selected>512 x 320 (fast)</option>
+                    <option value="640x480">640 x 480</option>
+                    <option value="768x512">768 x 512</option>
+                  </select>
+                </div>
+                <div class="control-group">
+                  <label>Frames</label>
+                  <select class="select" id="vid-frames">
+                    <option value="25">25 (~3s)</option>
+                    <option value="37" selected>37 (~5s)</option>
+                    <option value="49">49 (~6s)</option>
+                  </select>
+                </div>
               </div>
-              <div class="control-group">
-                <label>Frames</label>
-                <select class="select" id="vid-frames">
-                  <option value="25">25 (~3s)</option>
-                  <option value="37" selected>37 (~5s)</option>
-                  <option value="49">49 (~6s)</option>
-                </select>
+              <div class="control-row">
+                <div class="control-group">
+                  <label>Steps</label>
+                  <input type="number" class="input" id="vid-steps" value="20" min="1" max="50">
+                </div>
+                <div class="control-group">
+                  <label>Seed</label>
+                  <input type="number" class="input" id="vid-seed" placeholder="Random" min="0">
+                </div>
               </div>
             </div>
-            <div class="control-row">
-              <div class="control-group">
-                <label>Steps</label>
-                <input type="number" class="input" id="vid-steps" value="20" min="1" max="50">
-              </div>
-              <div class="control-group">
-                <label>Seed</label>
-                <input type="number" class="input" id="vid-seed" placeholder="Random" min="0">
+            <div id="api-vid-controls" class="hidden">
+              <div class="control-row">
+                <div class="control-group">
+                  <label>Aspect Ratio</label>
+                  <select class="select" id="vid-aspect-ratio">
+                    <option value="16:9" selected>16:9 (Landscape)</option>
+                    <option value="9:16">9:16 (Portrait)</option>
+                  </select>
+                </div>
+                <div class="control-group">
+                  <label>Duration</label>
+                  <select class="select" id="vid-duration">
+                    <option value="4">4 seconds</option>
+                    <option value="6">6 seconds</option>
+                    <option value="8" selected>8 seconds</option>
+                  </select>
+                </div>
               </div>
             </div>
             <button class="btn btn-accent btn-generate" id="btn-gen-video">Generate Video</button>
@@ -216,71 +326,257 @@
         </div>
       </div>
 
-      <!-- Models Tab -->
-      <div class="tab-panel" id="tab-models">
-        <div class="models-layout">
-          <!-- GPU Status -->
-          <div class="card gpu-card" id="gpu-card">
-            <h3>GPU Status</h3>
-            <div class="gpu-info">
-              <div class="gpu-stat">
-                <span class="gpu-label">GPU</span>
-                <span class="gpu-value" id="gpu-name">--</span>
+      <!-- Audio/TTS Tab -->
+      <div class="tab-panel" id="tab-audio">
+        <div class="gen-layout">
+          <div class="gen-controls">
+            <h3>Text to Speech</h3>
+            <div class="control-group">
+              <label>Provider</label>
+              <select class="select" id="tts-provider">
+                <option value="gemini" selected>Gemini (Free tier - 10 req/min)</option>
+                <option value="openai">OpenAI tts-1-hd (Paid)</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Voice</label>
+              <select class="select" id="tts-voice">
+                <!-- Gemini voices (default) -->
+                <option value="Kore" selected>Kore (Default)</option>
+                <option value="Aoede">Aoede</option>
+                <option value="Charon">Charon</option>
+                <option value="Fenrir">Fenrir</option>
+                <option value="Leda">Leda</option>
+                <option value="Orus">Orus</option>
+                <option value="Puck">Puck</option>
+                <option value="Zephyr">Zephyr</option>
+                <option value="Altair">Altair</option>
+                <option value="Aurora">Aurora</option>
+                <option value="Basalt">Basalt</option>
+                <option value="Cove">Cove</option>
+                <option value="Ember">Ember</option>
+                <option value="Haven">Haven</option>
+                <option value="Iris">Iris</option>
+                <option value="Juniper">Juniper</option>
+                <option value="Maple">Maple</option>
+                <option value="Nova">Nova</option>
+                <option value="Orbit">Orbit</option>
+                <option value="Pine">Pine</option>
+                <option value="Reef">Reef</option>
+                <option value="Sage">Sage</option>
+                <option value="Solstice">Solstice</option>
+                <option value="Terrain">Terrain</option>
+                <option value="Vale">Vale</option>
+                <option value="Wren">Wren</option>
+              </select>
+            </div>
+            <div class="control-group" id="tts-language-group">
+              <label>Language</label>
+              <select class="select" id="tts-language">
+                <option value="en-US" selected>English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="zh-CN">Chinese (Mandarin)</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="ko-KR">Korean</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Text</label>
+              <textarea class="textarea" id="tts-text" rows="6" placeholder="Enter text to speak... Use emotional tags like [laughing], [whispering], [sigh], [shouting], [sarcasm], [short pause], [medium pause]"></textarea>
+            </div>
+            <div class="control-group" id="tts-prompt-group">
+              <label>Style Direction (Gemini only)</label>
+              <textarea class="textarea" id="tts-prompt" rows="2" placeholder="e.g. Speak warmly and enthusiastically, like a children's storyteller"></textarea>
+            </div>
+            <div class="control-group hidden" id="tts-speed-group">
+              <label>Speed</label>
+              <div class="settings-row">
+                <input type="range" id="tts-speed" min="0.25" max="4.0" step="0.25" value="1.0" class="range">
+                <span class="range-value" id="tts-speed-value">1.0x</span>
               </div>
-              <div class="gpu-stat">
-                <span class="gpu-label">VRAM</span>
-                <div class="vram-bar-large">
-                  <div class="vram-fill" id="gpu-vram-fill"></div>
+            </div>
+            <button class="btn btn-accent btn-generate" id="btn-gen-tts">Generate Speech</button>
+            <div class="gen-progress hidden" id="tts-progress">
+              <div class="progress-bar"><div class="progress-fill indeterminate"></div></div>
+              <span class="progress-text">Generating audio...</span>
+            </div>
+            <div class="tts-tags-ref">
+              <details>
+                <summary>Emotional Tags Reference</summary>
+                <div class="tts-tags-grid">
+                  <span class="tts-tag">[laughing]</span>
+                  <span class="tts-tag">[sigh]</span>
+                  <span class="tts-tag">[whispering]</span>
+                  <span class="tts-tag">[shouting]</span>
+                  <span class="tts-tag">[sarcasm]</span>
+                  <span class="tts-tag">[robotic]</span>
+                  <span class="tts-tag">[uhm]</span>
+                  <span class="tts-tag">[extremely fast]</span>
+                  <span class="tts-tag">[short pause]</span>
+                  <span class="tts-tag">[medium pause]</span>
+                  <span class="tts-tag">[long pause]</span>
                 </div>
-                <span class="gpu-value" id="gpu-vram-text">-- / -- GB</span>
-              </div>
-              <div class="gpu-stat">
-                <span class="gpu-label">ComfyUI</span>
-                <span class="gpu-value" id="gpu-comfyui-version">--</span>
-              </div>
-              <div class="gpu-stat">
-                <span class="gpu-label">Loaded</span>
-                <span class="gpu-value" id="gpu-loaded-models">None</span>
+              </details>
+            </div>
+          </div>
+          <div class="gen-gallery tts-gallery" id="tts-gallery">
+            <div class="gallery-empty">No audio generated yet. Write text and click Generate Speech.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div class="tab-panel" id="tab-settings">
+        <div class="settings-layout">
+          <!-- Sub-tab bar -->
+          <div class="settings-subtabs">
+            <button class="settings-subtab active" data-subtab="availability">Model Availability</button>
+            <button class="settings-subtab" data-subtab="gpu">GPU</button>
+            <button class="settings-subtab" data-subtab="ollama">Ollama Models</button>
+            <button class="settings-subtab" data-subtab="api-models">API Models</button>
+          </div>
+
+          <!-- Model Availability Sub-panel (first tab, active by default) -->
+          <div class="settings-panel active" id="settings-availability">
+            <div class="settings-content">
+              <div class="card">
+                <div class="card-header-row">
+                  <h3>Model Availability</h3>
+                  <div class="availability-actions">
+                    <button class="btn btn-accent btn-sm" id="btn-save-availability">Save Changes</button>
+                  </div>
+                </div>
+                <p class="card-description">Control which models are visible to each app. Unchecked models won't appear in that app's model selector.</p>
+                <div class="availability-matrix-wrap">
+                  <table class="availability-matrix" id="availability-matrix">
+                    <thead>
+                      <tr>
+                        <th class="matrix-model-col">Model</th>
+                        <th class="matrix-app-col">AI Playground</th>
+                        <th class="matrix-app-col">VocabVista</th>
+                        <th class="matrix-app-col">LittleReader</th>
+                        <th class="matrix-app-col">EnglishPrep</th>
+                        <th class="matrix-app-col">ZhongkaoPrep</th>
+                      </tr>
+                    </thead>
+                    <tbody id="availability-matrix-body">
+                      <tr><td colspan="6" class="table-empty">Loading models...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Pull Model -->
-          <div class="card">
-            <h3>Pull Model</h3>
-            <div class="pull-row">
-              <input type="text" class="input" id="pull-model-name" placeholder="e.g. llama3:8b, deepseek-coder:6.7b">
-              <button class="btn btn-accent" id="btn-pull-model">Pull</button>
-            </div>
-            <div class="pull-progress hidden" id="pull-progress">
-              <div class="progress-bar"><div class="progress-fill" id="pull-progress-fill"></div></div>
-              <span class="progress-text" id="pull-progress-text">Downloading...</span>
+          <!-- GPU Sub-panel -->
+          <div class="settings-panel" id="settings-gpu">
+            <div class="settings-content">
+              <div class="card gpu-card" id="gpu-card">
+                <h3>GPU Status</h3>
+                <div class="gpu-info">
+                  <div class="gpu-stat">
+                    <span class="gpu-label">GPU</span>
+                    <span class="gpu-value" id="gpu-name">--</span>
+                  </div>
+                  <div class="gpu-stat">
+                    <span class="gpu-label">VRAM</span>
+                    <div class="vram-bar-large">
+                      <div class="vram-fill" id="gpu-vram-fill"></div>
+                    </div>
+                    <span class="gpu-value" id="gpu-vram-text">-- / -- GB</span>
+                  </div>
+                  <div class="gpu-stat">
+                    <span class="gpu-label">ComfyUI</span>
+                    <span class="gpu-value" id="gpu-comfyui-version">--</span>
+                  </div>
+                  <div class="gpu-stat">
+                    <span class="gpu-label">Loaded</span>
+                    <span class="gpu-value" id="gpu-loaded-models">None</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Installed Models -->
-          <div class="card">
-            <h3>Installed Models</h3>
-            <table class="models-table">
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Size</th>
-                  <th>Params</th>
-                  <th>Quantization</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="models-table-body">
-                <tr><td colspan="5" class="table-empty">Loading...</td></tr>
-              </tbody>
-            </table>
+          <!-- Ollama Models Sub-panel -->
+          <div class="settings-panel" id="settings-ollama">
+            <div class="settings-content">
+              <div class="card">
+                <h3>Pull Model</h3>
+                <div class="pull-row">
+                  <input type="text" class="input" id="pull-model-name" placeholder="e.g. llama3:8b, deepseek-coder:6.7b">
+                  <button class="btn btn-accent" id="btn-pull-model">Pull</button>
+                </div>
+                <div class="pull-progress hidden" id="pull-progress">
+                  <div class="progress-bar"><div class="progress-fill" id="pull-progress-fill"></div></div>
+                  <span class="progress-text" id="pull-progress-text">Downloading...</span>
+                </div>
+              </div>
+              <div class="card">
+                <h3>Installed Models</h3>
+                <table class="models-table">
+                  <thead>
+                    <tr>
+                      <th>Model</th>
+                      <th>Size</th>
+                      <th>Params</th>
+                      <th>Quantization</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="models-table-body">
+                    <tr><td colspan="5" class="table-empty">Loading...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card">
+                <h3>ComfyUI Models</h3>
+                <div id="comfyui-models-list" class="comfyui-models">Loading...</div>
+              </div>
+            </div>
           </div>
 
-          <!-- ComfyUI Models -->
-          <div class="card">
-            <h3>ComfyUI Models</h3>
-            <div id="comfyui-models-list" class="comfyui-models">Loading...</div>
+          <!-- API Models Sub-panel -->
+          <div class="settings-panel" id="settings-api-models">
+            <div class="settings-content">
+              <div class="card">
+                <div class="card-header-row">
+                  <h3>API Models</h3>
+                  <button class="btn btn-primary btn-sm" id="btn-discover-models">Check Latest Models</button>
+                </div>
+                <p class="card-description" id="discover-status">Discovered models from OpenAI and Gemini APIs will appear here.</p>
+                <div class="api-provider-section" id="api-openai-section">
+                  <h4>
+                    <span class="provider-badge openai">OpenAI</span>
+                    <span class="model-count" id="openai-model-count"></span>
+                  </h4>
+                  <div class="api-model-list" id="api-openai-list">
+                    <span class="text-muted">Click "Check Latest Models" to discover available models.</span>
+                  </div>
+                </div>
+                <div class="api-provider-section" id="api-gemini-section">
+                  <h4>
+                    <span class="provider-badge gemini">Gemini</span>
+                    <span class="model-count" id="gemini-model-count"></span>
+                  </h4>
+                  <div class="api-model-list" id="api-gemini-list">
+                    <span class="text-muted">Click "Check Latest Models" to discover available models.</span>
+                  </div>
+                </div>
+                <div class="api-provider-section" id="api-deepseek-section">
+                  <h4>
+                    <span class="provider-badge deepseek">DeepSeek</span>
+                    <span class="model-count" id="deepseek-model-count"></span>
+                  </h4>
+                  <div class="api-model-list" id="api-deepseek-list">
+                    <span class="text-muted">Click "Check Latest Models" to discover available models.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -290,8 +586,13 @@
   <!-- Lightbox -->
   <div class="lightbox hidden" id="lightbox">
     <button class="lightbox-close" id="lightbox-close">&times;</button>
-    <img class="lightbox-img" id="lightbox-img" src="" alt="">
-    <div class="lightbox-info" id="lightbox-info"></div>
+    <div class="lightbox-media" id="lightbox-media"></div>
+    <div class="lightbox-prompt" id="lightbox-prompt"></div>
+    <div class="lightbox-meta" id="lightbox-meta"></div>
+    <div class="lightbox-actions">
+      <button class="btn btn-ghost btn-sm" id="lightbox-copy">Copy Prompt</button>
+      <button class="btn btn-accent btn-sm" id="lightbox-use">Use Prompt</button>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -300,7 +601,9 @@
   <script src="/js/chat.js"></script>
   <script src="/js/image.js"></script>
   <script src="/js/video.js"></script>
-  <script src="/js/models.js"></script>
+  <script src="/js/compare.js"></script>
+  <script src="/js/tts.js"></script>
+  <script src="/js/settings.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

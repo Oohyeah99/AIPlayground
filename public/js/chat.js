@@ -1,11 +1,12 @@
 /**
- * chat.js — Chat tab: conversations, streaming LLM chat, markdown rendering
+ * chat.js — Chat tab: conversations, streaming LLM chat, markdown rendering, file attachments
  */
 const Chat = (() => {
   let conversations = [];
   let activeConvId = null;
   let abortController = null;
   let isGenerating = false;
+  let pendingAttachments = []; // [{ name, mime, data (base64), previewUrl }]
 
   // DOM refs
   const $convList = document.getElementById('conv-list');
@@ -14,6 +15,9 @@ const Chat = (() => {
   const $input = document.getElementById('chat-input');
   const $btnSend = document.getElementById('btn-send');
   const $btnStop = document.getElementById('btn-stop');
+  const $btnAttach = document.getElementById('btn-attach');
+  const $fileInput = document.getElementById('file-input');
+  const $attachPreview = document.getElementById('attachment-preview');
   const $modelSelect = document.getElementById('chat-model-select');
   const $sysPromptEditor = document.getElementById('system-prompt-editor');
   const $sysPromptInput = document.getElementById('system-prompt-input');
@@ -45,6 +49,88 @@ const Chat = (() => {
 
   function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // --- File attachments ---
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // result is "data:mime;base64,XXXX" — extract just the base64 part
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleFiles(files) {
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) {
+        alert(`File "${file.name}" is too large (max 20MB).`);
+        continue;
+      }
+      const data = await readFileAsBase64(file);
+      const att = { name: file.name, mime: file.type, data };
+      if (file.type.startsWith('image/')) {
+        att.previewUrl = URL.createObjectURL(file);
+      }
+      pendingAttachments.push(att);
+    }
+    renderAttachmentPreview();
+  }
+
+  function removeAttachment(index) {
+    const att = pendingAttachments[index];
+    if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+    pendingAttachments.splice(index, 1);
+    renderAttachmentPreview();
+  }
+
+  function clearAttachments() {
+    pendingAttachments.forEach(a => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
+    pendingAttachments = [];
+    renderAttachmentPreview();
+  }
+
+  function renderAttachmentPreview() {
+    if (pendingAttachments.length === 0) {
+      $attachPreview.classList.add('hidden');
+      $attachPreview.innerHTML = '';
+      return;
+    }
+
+    $attachPreview.classList.remove('hidden');
+    $attachPreview.innerHTML = '';
+
+    pendingAttachments.forEach((att, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'attachment-chip';
+
+      if (att.previewUrl) {
+        chip.innerHTML = `
+          <img src="${att.previewUrl}" class="attachment-thumb" alt="${escapeHtml(att.name)}">
+          <span class="attachment-name">${escapeHtml(att.name)}</span>
+          <button class="attachment-remove" data-idx="${i}">&times;</button>
+        `;
+      } else {
+        const icon = att.mime === 'application/pdf' ? 'PDF'
+          : att.mime.includes('word') ? 'DOC'
+          : 'TXT';
+        chip.innerHTML = `
+          <span class="attachment-icon">${icon}</span>
+          <span class="attachment-name">${escapeHtml(att.name)}</span>
+          <button class="attachment-remove" data-idx="${i}">&times;</button>
+        `;
+      }
+
+      chip.querySelector('.attachment-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeAttachment(parseInt(e.target.dataset.idx));
+      });
+      $attachPreview.appendChild(chip);
+    });
   }
 
   // --- Conversation list ---
@@ -120,15 +206,38 @@ const Chat = (() => {
     const avatar = role === 'user' ? 'U' : 'AI';
     const renderedContent = role === 'assistant' ? renderMarkdown(content) : escapeHtml(content).replace(/\n/g, '<br>');
 
+    // Build attachment thumbnails for user messages
+    let attachHtml = '';
+    if (meta?.attachments && meta.attachments.length > 0) {
+      attachHtml = '<div class="message-attachments">';
+      for (const att of meta.attachments) {
+        if (att.mime && att.mime.startsWith('image/') && att.data) {
+          attachHtml += `<img src="data:${att.mime};base64,${att.data}" class="message-image" alt="${escapeHtml(att.name)}">`;
+        } else {
+          const icon = att.mime === 'application/pdf' ? 'PDF' : att.mime?.includes('word') ? 'DOC' : 'TXT';
+          attachHtml += `<span class="message-file-badge">${icon}: ${escapeHtml(att.name)}</span>`;
+        }
+      }
+      attachHtml += '</div>';
+    }
+
     let metaHtml = '';
-    if (meta?.tokens_eval) {
-      const tps = meta.eval_duration_ms ? Math.round(meta.tokens_eval / (meta.eval_duration_ms / 1000)) : '';
-      metaHtml = `<div class="message-meta">${meta.tokens_eval} tokens${tps ? ` (${tps} tok/s)` : ''}${meta.duration_ms ? ` | ${(meta.duration_ms / 1000).toFixed(1)}s` : ''}</div>`;
+    if (meta?.tokens_eval || meta?.model) {
+      const parts = [];
+      const provLabel = meta.provider && meta.provider !== 'ollama' ? meta.provider.charAt(0).toUpperCase() + meta.provider.slice(1) + ' | ' : '';
+      if (meta.model) parts.push(`<strong>${provLabel}${escapeHtml(meta.model)}</strong>`);
+      if (meta.tokens_eval) {
+        const tps = meta.eval_duration_ms ? Math.round(meta.tokens_eval / (meta.eval_duration_ms / 1000)) : (meta.duration_ms ? Math.round(meta.tokens_eval / (meta.duration_ms / 1000)) : '');
+        parts.push(`${meta.tokens_eval} tokens${tps ? ` (${tps} tok/s)` : ''}`);
+      }
+      if (meta.duration_ms) parts.push(`${(meta.duration_ms / 1000).toFixed(1)}s`);
+      metaHtml = `<div class="message-meta">${parts.join(' | ')}</div>`;
     }
 
     el.innerHTML = `
       <div class="message-avatar">${avatar}</div>
       <div>
+        ${attachHtml}
         <div class="message-content">${renderedContent}</div>
         ${metaHtml}
       </div>
@@ -193,11 +302,17 @@ const Chat = (() => {
     });
 
     // Add meta
-    if (meta?.tokens_eval) {
-      const tps = meta.eval_duration_ms ? Math.round(meta.tokens_eval / (meta.eval_duration_ms / 1000)) : '';
+    if (meta?.tokens_eval || meta?.model) {
+      const parts = [];
+      if (meta.model) parts.push(meta.model);
+      if (meta.tokens_eval) {
+        const tps = meta.eval_duration_ms ? Math.round(meta.tokens_eval / (meta.eval_duration_ms / 1000)) : '';
+        parts.push(`${meta.tokens_eval} tokens${tps ? ` (${tps} tok/s)` : ''}`);
+      }
+      if (meta.duration_ms) parts.push(`${(meta.duration_ms / 1000).toFixed(1)}s`);
       const metaEl = document.createElement('div');
       metaEl.className = 'message-meta';
-      metaEl.textContent = `${meta.tokens_eval} tokens${tps ? ` (${tps} tok/s)` : ''}${meta.duration_ms ? ` | ${(meta.duration_ms / 1000).toFixed(1)}s` : ''}`;
+      metaEl.innerHTML = parts.length ? `<strong>${parts[0]}</strong>${parts.length > 1 ? ' | ' + parts.slice(1).join(' | ') : ''}` : '';
       el.querySelector('.message-content').parentElement.appendChild(metaEl);
     }
   }
@@ -211,10 +326,15 @@ const Chat = (() => {
   // --- Send message ---
   async function sendMessage() {
     const text = $input.value.trim();
-    if (!text || isGenerating) return;
+    if ((!text && pendingAttachments.length === 0) || isGenerating) return;
 
-    const model = $modelSelect.value;
-    if (!model) return alert('Select a model first');
+    const selectValue = $modelSelect.value;
+    if (!selectValue) return alert('Select a model first');
+
+    // Parse "provider/model" format
+    const slashIdx = selectValue.indexOf('/');
+    const provider = slashIdx > 0 ? selectValue.slice(0, slashIdx) : 'ollama';
+    const model = slashIdx > 0 ? selectValue.slice(slashIdx + 1) : selectValue;
 
     // Create conversation if needed
     if (!activeConvId) {
@@ -223,21 +343,28 @@ const Chat = (() => {
 
     // Update conversation model if changed
     const conv = conversations.find(c => c.id === activeConvId);
-    if (conv && conv.model !== model) {
-      conv.model = model;
-      await API.updateConversation(activeConvId, { model });
+    if (conv && conv.model !== selectValue) {
+      conv.model = selectValue;
+      await API.updateConversation(activeConvId, { model: selectValue });
     }
 
-    // Save & display user message
-    appendMessage('user', text);
-    await API.saveMessage(activeConvId, { role: 'user', content: text });
+    // Capture attachments before clearing
+    const attachments = pendingAttachments.map(a => ({ name: a.name, mime: a.mime, data: a.data }));
+    const displayAttachments = pendingAttachments.map(a => ({ name: a.name, mime: a.mime, data: a.data }));
+
+    // Save & display user message (with attachment previews)
+    const displayText = text || (attachments.length ? `[${attachments.length} file(s) attached]` : '');
+    appendMessage('user', displayText, { attachments: displayAttachments });
+    await API.saveMessage(activeConvId, { role: 'user', content: displayText });
     $input.value = '';
     $input.style.height = 'auto';
+    clearAttachments();
     scrollToBottom();
 
     // Auto-title from first message
     if (conv && conv.title === 'New Chat') {
-      const title = text.slice(0, 60) + (text.length > 60 ? '...' : '');
+      const titleText = text || attachments.map(a => a.name).join(', ');
+      const title = titleText.slice(0, 60) + (titleText.length > 60 ? '...' : '');
       conv.title = title;
       API.updateConversation(activeConvId, { title });
       renderConvList();
@@ -252,6 +379,14 @@ const Chat = (() => {
       if (m.role !== 'system') chatMessages.push({ role: m.role, content: m.content });
     }
 
+    // Attach files to the last user message
+    if (attachments.length > 0) {
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      if (lastMsg && lastMsg.role === 'user') {
+        lastMsg.attachments = attachments;
+      }
+    }
+
     // Start streaming
     isGenerating = true;
     $btnSend.classList.add('hidden');
@@ -263,17 +398,16 @@ const Chat = (() => {
     let lastRender = 0;
 
     try {
-      const result = await API.ollamaChat(
+      const result = await API.chat(
+        provider,
         model,
         chatMessages,
         {
           temperature: parseFloat($temperature.value),
           think: $thinkToggle.checked,
-          json: $jsonToggle.checked,
         },
         abortController.signal,
         (accumulated) => {
-          // Progressive rendering with RAF debounce
           if (!streamEl) {
             thinkingEl.remove();
             streamEl = appendMessage('assistant', '');
@@ -292,13 +426,15 @@ const Chat = (() => {
         thinkingEl.remove();
         streamEl = appendMessage('assistant', '');
       }
-      finalizeStreamingMessage(streamEl, result.content, result);
+      finalizeStreamingMessage(streamEl, result.content, { ...result, model, provider });
       scrollToBottom();
 
       // Save assistant message
       await API.saveMessage(activeConvId, {
         role: 'assistant',
         content: result.content,
+        model,
+        provider,
         tokens_eval: result.tokens_eval,
         tokens_prompt: result.tokens_prompt,
         duration_ms: result.duration_ms,
@@ -331,6 +467,7 @@ const Chat = (() => {
       $messages.innerHTML = '';
       $welcome.classList.remove('hidden');
       $sysPromptInput.value = '';
+      clearAttachments();
       renderConvList();
     });
 
@@ -348,6 +485,48 @@ const Chat = (() => {
     $input.addEventListener('input', () => {
       $input.style.height = 'auto';
       $input.style.height = Math.min($input.scrollHeight, 200) + 'px';
+    });
+
+    // File attachment
+    $btnAttach.addEventListener('click', () => $fileInput.click());
+    $fileInput.addEventListener('change', () => {
+      if ($fileInput.files.length) {
+        handleFiles($fileInput.files);
+        $fileInput.value = ''; // reset so same file can be re-selected
+      }
+    });
+
+    // Drag and drop on chat input area
+    const $inputArea = $input.closest('.chat-input-area');
+    $inputArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      $inputArea.classList.add('drag-over');
+    });
+    $inputArea.addEventListener('dragleave', () => {
+      $inputArea.classList.remove('drag-over');
+    });
+    $inputArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      $inputArea.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+
+    // Paste image from clipboard
+    $input.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const files = [];
+      for (const item of items) {
+        if (item.kind === 'file') {
+          files.push(item.getAsFile());
+        }
+      }
+      if (files.length) {
+        e.preventDefault();
+        handleFiles(files);
+      }
     });
 
     // System prompt toggle

@@ -1,8 +1,66 @@
 /**
- * api.js — Shared API client for Ollama and ComfyUI (via Express proxy)
+ * api.js — Shared API client for Ollama, OpenAI, Gemini, and ComfyUI (via Express proxy)
  */
 const API = {
-  // --- Ollama (proxied through /ollama/) ---
+  // --- Providers catalog ---
+  async getProviders(app) {
+    const url = app ? `/api/providers?app=${encodeURIComponent(app)}` : '/api/providers';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Providers: ${res.status}`);
+    return res.json();
+  },
+
+  // --- Unified streaming chat (all providers) ---
+  /**
+   * Streams chat from any provider. Calls onChunk(accumulatedText) for each token.
+   * Returns { content, provider, model, tokens_eval, tokens_prompt, duration_ms }
+   */
+  async chat(provider, model, messages, options, signal, onChunk) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, model, messages, options }),
+      signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Chat error ${res.status}: ${text}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let accumulated = '';
+    let meta = {};
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.type === 'chunk') {
+            accumulated += data.content;
+            if (onChunk) onChunk(accumulated);
+          } else if (data.type === 'done') {
+            meta = data.meta || {};
+            accumulated = data.content || accumulated;
+          } else if (data.type === 'error') {
+            throw new Error(data.message);
+          }
+        } catch (e) {
+          if (e.message && !e.message.startsWith('Unexpected')) throw e;
+        }
+      }
+    }
+    return { content: accumulated, ...meta };
+  },
+
+  // --- Ollama direct (for model management) ---
   async ollamaTags() {
     const res = await fetch('/ollama/api/tags');
     if (!res.ok) throw new Error(`Ollama tags: ${res.status}`);
@@ -22,7 +80,8 @@ const API = {
       body: JSON.stringify({ name }),
     });
     if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : { status: 'ok' };
   },
 
   async ollamaPull(name, onProgress) {
@@ -61,6 +120,7 @@ const API = {
       messages,
       stream: true,
       think: opts.think || false,
+      keep_alive: '30m',
       options: {},
     };
     if (opts.temperature !== undefined) body.options.temperature = opts.temperature;
@@ -166,6 +226,16 @@ const API = {
     return `/comfyui/view?filename=${encodeURIComponent(filename)}&type=output`;
   },
 
+  async comfyuiFreeMemory() {
+    const res = await fetch('/comfyui/free', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unload_models: true, free_memory: true }),
+    });
+    if (!res.ok) throw new Error(`ComfyUI free: ${res.status}`);
+    return res.json();
+  },
+
   // --- Local backend (conversations, generations) ---
   async getConversations() {
     const res = await fetch('/api/conversations');
@@ -218,6 +288,68 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    return res.json();
+  },
+
+  // --- Model Discovery & Registry ---
+  async discoverModels(force = false) {
+    const res = await fetch(`/api/models/discover${force ? '?force=true' : ''}`);
+    if (!res.ok) throw new Error(`Discover: ${res.status}`);
+    return res.json();
+  },
+
+  async getRegistry() {
+    const res = await fetch('/api/models/registry');
+    if (!res.ok) throw new Error(`Registry: ${res.status}`);
+    return res.json();
+  },
+
+  async saveRegistry(data) {
+    const res = await fetch('/api/models/registry', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`Save registry: ${res.status}`);
+    return res.json();
+  },
+
+  // --- Imagen (Google image generation) ---
+  async imagen(prompt, model, aspectRatio, sampleCount) {
+    const res = await fetch('/api/imagen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, model, aspectRatio, sampleCount }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Imagen: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // --- Veo (Google video generation) ---
+  async veoSubmit(prompt, model, aspectRatio, durationSeconds) {
+    const res = await fetch('/api/veo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, model, aspectRatio, durationSeconds }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Veo: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async veoPoll(operation) {
+    const res = await fetch(`/api/veo/status?operation=${encodeURIComponent(operation)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Veo poll: ${res.status}`);
+    }
     return res.json();
   },
 };

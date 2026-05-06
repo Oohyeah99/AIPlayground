@@ -1,0 +1,27 @@
+{
+  "global_hidden": [
+    "ollama/qwen3-coder:30b",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1-nano",
+    "openai/o3",
+    "openai/o3-pro",
+    "openai/o4-mini",
+    "gemini/gemini-2.5-flash",
+    "gemini/gemini-2.0-flash"
+  ],
+  "app_overrides": {
+    "ollama/gemma4:26b": {
+      "vocabvista": false,
+      "littlereader": false,
+      "englishprep": false,
+      "zhongkaoprep": false
+    },
+    "ollama/gemma4:e2b": {
+      "vocabvista": false,
+      "littlereader": false,
+      "englishprep": false,
+      "zhongkaoprep": false
+    }
+  }
+}
