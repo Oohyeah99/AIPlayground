@@ -11,7 +11,13 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch (err) {
+  console.error('better-sqlite3 unavailable:', err.message);
+  Database = null;
+}
 
 // Provider modules
 const ollamaProvider = require('./providers/ollama');
@@ -98,9 +104,23 @@ function saveRegistryFile(data) {
 }
 
 const dbPath = path.join(dataDir, 'playground.db');
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+let db;
+if (Database) {
+  try {
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+  } catch (err) {
+    console.error('Database init failed:', err.message);
+    db = null;
+  }
+}
+
+if (!db) {
+  console.warn('Using no-op database — conversations and generations will not persist');
+  const noop = { changes: 0, lastInsertRowid: 0 };
+  db = { exec: () => {}, pragma: () => {}, prepare: () => ({ all: () => [], run: () => noop, get: () => undefined }) };
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS conversations (
@@ -923,7 +943,8 @@ app.get('/*path', (req, res) => {
 
 // --- Start ---
 if (isVercel) {
-  module.exports = app;
+  const serverless = require('serverless-http');
+  module.exports = serverless(app);
 } else {
   app.listen(PORT, () => {
     console.log(`AI Playground running at http://localhost:${PORT}`);
