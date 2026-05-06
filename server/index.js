@@ -943,8 +943,7 @@ app.get('/*path', (req, res) => {
 
 // --- Start ---
 if (isVercel) {
-  const serverless = require('serverless-http');
-  module.exports = serverless(app);
+  module.exports = app;
 } else {
   app.listen(PORT, () => {
     console.log(`AI Playground running at http://localhost:${PORT}`);
