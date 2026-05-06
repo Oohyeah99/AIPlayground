@@ -1,22 +1,20 @@
 {
   "name": "ai-playground",
   "version": "1.0.0",
-  "description": "Unified AI interface for all open-source models on the office 4090 GPU",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "start": "node server/index.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
-    "express": "^5.1.0",
+    "express": "^4.21.0",
     "mammoth": "^1.12.0",
     "pdf-parse": "^2.4.5",
     "serverless-http": "^4.0.0",
     "sql.js": "^1.14.1"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": "22.x"
   }
 }
