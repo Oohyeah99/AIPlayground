@@ -6,3 +6,4 @@ data/outputs/
 data/*.baiduyun.uploading.cfg
 _ul
 .env
+.vercel

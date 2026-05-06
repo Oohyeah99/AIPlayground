@@ -11,7 +11,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { DatabaseSync } = require('node:sqlite');
+const Database = require('better-sqlite3');
 
 // Provider modules
 const ollamaProvider = require('./providers/ollama');
@@ -79,9 +79,7 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// --- Database ---
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+// --- Outputs directory ---
 const outputsDir = path.join(dataDir, 'outputs');
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
@@ -100,9 +98,9 @@ function saveRegistryFile(data) {
 }
 
 const dbPath = path.join(dataDir, 'playground.db');
-const db = new DatabaseSync(dbPath);
-db.exec('PRAGMA journal_mode = WAL');
-db.exec('PRAGMA foreign_keys = ON');
+const db = new Database(dbPath);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS conversations (
