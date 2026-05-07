@@ -1,11 +1,18 @@
 /**
  * api.js — Shared API client for Ollama, OpenAI, Gemini, and ComfyUI (via Express proxy)
  *
- * All API calls go through the Azure VM server (same-origin).
- * The Azure VM server proxies cloud API calls through Vercel to bypass
- * geographic restrictions (GFW blocks direct access from China).
+ * Cloud APIs (Imagen, OpenAI, Gemini, DeepSeek) are routed through Vercel
+ * to bypass geographic restrictions (blocked in HK/China regions).
+ * Requires browser proxy/VPN to reach Vercel from China.
  * Local APIs (Ollama, ComfyUI) go through the Azure VM proxy.
  */
+
+// Vercel deployment URL — browser reaches this via proxy/VPN
+const VERCEL_URL = 'https://ai-playground-test-xi.vercel.app';
+
+function vercelUrl(path) {
+  return `${VERCEL_URL}${path}`;
+}
 
 const API = {
   // --- Providers catalog ---
@@ -22,9 +29,14 @@ const API = {
    * Returns { content, provider, model, tokens_eval, tokens_prompt, duration_ms }
    */
   async chat(provider, model, messages, options, signal, onChunk) {
-    // All chat goes through Azure VM server (which proxies cloud providers via Vercel)
-    console.log('[API.chat] Calling /api/chat, provider=%s, model=%s', provider, model);
-    const res = await fetch('/api/chat', {
+    // Cloud providers (openai, gemini, deepseek) go through Vercel to bypass geographic restrictions.
+    // Local providers (ollama, ollama-local) go through the Azure VM proxy.
+    const cloudProviders = ['openai', 'gemini', 'deepseek'];
+    const useVercel = cloudProviders.includes(provider);
+    const baseUrl = useVercel ? vercelUrl('') : '';
+
+    console.log('[API.chat] Calling /api/chat, provider=%s, model=%s, via=%s', provider, model, useVercel ? 'Vercel' : 'Azure VM');
+    const res = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, model, messages, options }),
@@ -331,7 +343,7 @@ const API = {
 
   // --- Model Discovery & Registry ---
   async discoverModels(force = false) {
-    const res = await fetch(`/api/models/discover${force ? '?force=true' : ''}`);
+    const res = await fetch(`${vercelUrl('')}/api/models/discover${force ? '?force=true' : ''}`);
     if (!res.ok) throw new Error(`Discover: ${res.status}`);
     return res.json();
   },
@@ -356,7 +368,7 @@ const API = {
 
   // --- Imagen (Google image generation) ---
   async imagen(prompt, model, aspectRatio, sampleCount) {
-    const res = await fetch('/api/imagen', {
+    const res = await fetch(`${vercelUrl('')}/api/imagen`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, model, aspectRatio, sampleCount }),
@@ -370,7 +382,7 @@ const API = {
 
   // --- DALL-E (OpenAI image generation) ---
   async dalle(prompt, model, aspectRatio) {
-    const res = await fetch('/api/dalle', {
+    const res = await fetch(`${vercelUrl('')}/api/dalle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, model, aspectRatio }),
@@ -384,7 +396,7 @@ const API = {
 
   // --- Veo (Google video generation) ---
   async veoSubmit(prompt, model, aspectRatio, durationSeconds) {
-    const res = await fetch('/api/veo', {
+    const res = await fetch(`${vercelUrl('')}/api/veo`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, model, aspectRatio, durationSeconds }),
@@ -397,7 +409,7 @@ const API = {
   },
 
   async veoPoll(operation) {
-    const res = await fetch(`/api/veo/status?operation=${encodeURIComponent(operation)}`);
+    const res = await fetch(`${vercelUrl('')}/api/veo/status?operation=${encodeURIComponent(operation)}`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Veo poll: ${res.status}`);
@@ -414,7 +426,7 @@ const API = {
     };
 
     const systemPrompt = systemPrompts[type] || systemPrompts.image;
-    const res = await fetch('/api/chat', {
+    const res = await fetch(`${vercelUrl('')}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
