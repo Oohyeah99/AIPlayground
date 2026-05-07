@@ -1,6 +1,18 @@
 /**
  * api.js — Shared API client for Ollama, OpenAI, Gemini, and ComfyUI (via Express proxy)
+ *
+ * Cloud APIs (Imagen, OpenAI, Gemini, DeepSeek) are routed through Vercel
+ * to bypass geographic restrictions (Imagen blocked in HK/China regions).
+ * Local APIs (Ollama, ComfyUI) go through the Azure VM proxy.
  */
+
+// Set this to your Vercel deployment URL (e.g., 'https://ai-playground-xxx.vercel.app')
+// Leave empty to use relative paths (Azure VM handles everything).
+const VERCEL_URL = 'https://ai-playground-test-xi.vercel.app';
+
+function vercelUrl(path) {
+  return VERCEL_URL ? `${VERCEL_URL}${path}` : path;
+}
 const API = {
   // --- Providers catalog ---
   async getProviders(app) {
@@ -16,14 +28,23 @@ const API = {
    * Returns { content, provider, model, tokens_eval, tokens_prompt, duration_ms }
    */
   async chat(provider, model, messages, options, signal, onChunk) {
-    const res = await fetch('/api/chat', {
+    // Cloud providers (openai, gemini, deepseek) go through Vercel to bypass geographic restrictions.
+    // Local providers (ollama, ollama-local) go through the Azure VM proxy.
+    const cloudProviders = ['openai', 'gemini', 'deepseek'];
+    const useVercel = VERCEL_URL && cloudProviders.includes(provider);
+    const baseUrl = useVercel ? vercelUrl('') : '';
+
+    console.log('[API.chat] Calling /api/chat, provider=%s, model=%s, via=%s', provider, model, useVercel ? 'Vercel' : 'Azure VM');
+    const res = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, model, messages, options }),
       signal,
     });
+    console.log('[API.chat] Response status: %d, contentType: %s', res.status, res.headers.get('content-type'));
     if (!res.ok) {
       const text = await res.text();
+      console.error('[API.chat] Error response:', text);
       throw new Error(`Chat error ${res.status}: ${text}`);
     }
 
@@ -32,10 +53,14 @@ const API = {
     let accumulated = '';
     let meta = {};
     let buf = '';
+    let chunkCount = 0;
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        console.log('[API.chat] Stream done, total chunks read: %d, accumulated length: %d', chunkCount, accumulated.length);
+        break;
+      }
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split('\n');
       buf = lines.pop();
@@ -45,18 +70,28 @@ const API = {
           const data = JSON.parse(line);
           if (data.type === 'chunk') {
             accumulated += data.content;
+            chunkCount++;
+            if (chunkCount <= 3) {
+              console.log('[API.chat] Chunk %d: %s', chunkCount, data.content.slice(0, 50));
+            }
             if (onChunk) onChunk(accumulated);
           } else if (data.type === 'done') {
+            console.log('[API.chat] Done event, meta: %s', JSON.stringify(data.meta));
             meta = data.meta || {};
             accumulated = data.content || accumulated;
           } else if (data.type === 'error') {
+            console.error('[API.chat] Error event:', data.message);
             throw new Error(data.message);
           }
         } catch (e) {
-          if (e.message && !e.message.startsWith('Unexpected')) throw e;
+          if (e.message && !e.message.startsWith('Unexpected')) {
+            console.error('[API.chat] Parse error:', e.message, 'line:', line.slice(0, 100));
+            throw e;
+          }
         }
       }
     }
+    console.log('[API.chat] Returning, content length: %d', accumulated.length);
     return { content: accumulated, ...meta };
   },
 
@@ -291,9 +326,24 @@ const API = {
     return res.json();
   },
 
+  // --- Media Upload (persist Vercel base64 to Azure VM disk) ---
+  async uploadMedia(filename, base64, mimeType) {
+    const res = await fetch('/api/media/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, base64, mimeType }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Upload: ${res.status}`);
+    }
+    return res.json();
+  },
+
   // --- Model Discovery & Registry ---
   async discoverModels(force = false) {
-    const res = await fetch(`/api/models/discover${force ? '?force=true' : ''}`);
+    const baseUrl = VERCEL_URL ? vercelUrl('') : '';
+    const res = await fetch(`${baseUrl}/api/models/discover${force ? '?force=true' : ''}`);
     if (!res.ok) throw new Error(`Discover: ${res.status}`);
     return res.json();
   },
@@ -318,7 +368,9 @@ const API = {
 
   // --- Imagen (Google image generation) ---
   async imagen(prompt, model, aspectRatio, sampleCount) {
-    const res = await fetch('/api/imagen', {
+    // Route through Vercel to bypass geographic restrictions
+    const baseUrl = VERCEL_URL ? vercelUrl('') : '';
+    const res = await fetch(`${baseUrl}/api/imagen`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, model, aspectRatio, sampleCount }),
@@ -330,9 +382,25 @@ const API = {
     return res.json();
   },
 
+  // --- DALL-E (OpenAI image generation) ---
+  async dalle(prompt, model, aspectRatio) {
+    const baseUrl = VERCEL_URL ? vercelUrl('') : '';
+    const res = await fetch(`${baseUrl}/api/dalle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, model, aspectRatio }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `DALL-E: ${res.status}`);
+    }
+    return res.json();
+  },
+
   // --- Veo (Google video generation) ---
   async veoSubmit(prompt, model, aspectRatio, durationSeconds) {
-    const res = await fetch('/api/veo', {
+    const baseUrl = VERCEL_URL ? vercelUrl('') : '';
+    const res = await fetch(`${baseUrl}/api/veo`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, model, aspectRatio, durationSeconds }),
@@ -345,11 +413,55 @@ const API = {
   },
 
   async veoPoll(operation) {
-    const res = await fetch(`/api/veo/status?operation=${encodeURIComponent(operation)}`);
+    const baseUrl = VERCEL_URL ? vercelUrl('') : '';
+    const res = await fetch(`${baseUrl}/api/veo/status?operation=${encodeURIComponent(operation)}`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Veo poll: ${res.status}`);
     }
     return res.json();
+  },
+
+  // --- Random Prompt Generator (DeepSeek) ---
+  async randomPrompt(type) {
+    const systemPrompts = {
+      image: 'You are a creative prompt generator for AI image generation. Generate a single detailed, vivid image prompt. Include subject, setting, lighting, mood, and style details. Be creative and varied — pick random subjects from nature, architecture, food, portraits, sci-fi, fantasy, etc. Output ONLY the prompt text, nothing else. No quotes, no labels, no explanations.',
+      video: 'You are a creative prompt generator for AI video generation. Generate a single detailed video clip prompt describing motion, scene, and visual dynamics. Include camera movement, subject action, and environment. Be creative and varied. Output ONLY the prompt text, nothing else. No quotes, no labels, no explanations.',
+      audio: 'You are a creative text generator for AI text-to-speech. Generate a short, interesting passage of text (2-4 sentences) suitable for speech synthesis. Be creative — try quotes, stories, announcements, poems, or dramatic readings. You may include emotional tags like [whispering], [laughing], [sigh], [sarcasm]. Output ONLY the text to be spoken, nothing else. No quotes, no labels, no explanations.',
+    };
+
+    const systemPrompt = systemPrompts[type] || systemPrompts.image;
+    const baseUrl = VERCEL_URL ? vercelUrl('') : '';
+    const res = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Generate a random prompt now.' },
+        ],
+        options: { temperature: 1.2 },
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Random prompt: ${res.status}`);
+    }
+
+    // DeepSeek chat returns NDJSON stream via Vercel
+    const text = await res.text();
+    const lines = text.trim().split('\n').filter(l => l.trim());
+    let accumulated = '';
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.type === 'chunk') accumulated += parsed.content;
+        if (parsed.type === 'done') accumulated = parsed.content || accumulated;
+      } catch {}
+    }
+    return accumulated.trim();
   },
 };

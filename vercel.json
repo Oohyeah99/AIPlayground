@@ -1,14 +1,15 @@
 {
+  "version": 2,
   "builds": [
-    {
-      "src": "server/index.js",
-      "use": "@vercel/node@3"
-    }
+    { "src": "api/index.js", "use": "@vercel/node" }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "server/index.js"
-    }
+    { "src": "/api/imagen", "dest": "/api/index.js" },
+    { "src": "/api/chat", "dest": "/api/index.js" },
+    { "src": "/api/veo", "dest": "/api/index.js" },
+    { "src": "/api/veo/status", "dest": "/api/index.js" },
+    { "src": "/api/dalle", "dest": "/api/index.js" },
+    { "src": "/api/health", "dest": "/api/index.js" },
+    { "src": "/api/models/discover", "dest": "/api/index.js" }
   ]
 }
