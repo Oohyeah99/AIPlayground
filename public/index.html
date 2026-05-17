@@ -185,15 +185,18 @@
               <label>Provider / Model</label>
               <select class="select" id="img-provider">
                 <option value="flux-dev">Flux Dev (ComfyUI)</option>
-                <option value="ernie-turbo">ERNIE-Image Turbo (ComfyUI)</option>
-                <option value="imagen-fast">Imagen 4.0 Fast (API)</option>
-                <option value="imagen">Imagen 4.0 (API)</option>
-                <option value="imagen-ultra">Imagen 4.0 Ultra (API)</option>
+                <option value="dalle3">OpenAI GPT Image</option>
+                <option value="imagen-fast">Google Imagen 4.0 Fast</option>
+                <option value="imagen">Google Imagen 4.0</option>
+                <option value="imagen-ultra">Google Imagen 4.0 Ultra</option>
               </select>
             </div>
             <div class="control-group">
               <label>Prompt</label>
-              <textarea class="textarea" id="img-prompt" rows="4" placeholder="Describe the image you want to create..."></textarea>
+              <div style="display:flex;gap:8px;align-items:flex-start;">
+                <textarea class="textarea" id="img-prompt" rows="4" placeholder="Describe the image you want to create..." style="flex:1;"></textarea>
+                <button class="btn btn-ghost btn-sm" id="btn-random-img-prompt" title="Generate a random image prompt">🎲</button>
+              </div>
             </div>
             <div id="comfyui-img-controls">
               <div class="control-row">
@@ -263,7 +266,10 @@
             </div>
             <div class="control-group">
               <label>Prompt</label>
-              <textarea class="textarea" id="vid-prompt" rows="4" placeholder="Describe the video clip you want to create..."></textarea>
+              <div style="display:flex;gap:8px;align-items:flex-start;">
+                <textarea class="textarea" id="vid-prompt" rows="4" placeholder="Describe the video clip you want to create..." style="flex:1;"></textarea>
+                <button class="btn btn-ghost btn-sm" id="btn-random-vid-prompt" title="Generate a random video prompt">🎲</button>
+              </div>
             </div>
             <div id="comfyui-vid-controls">
               <div class="control-row">
@@ -385,7 +391,10 @@
             </div>
             <div class="control-group">
               <label>Text</label>
-              <textarea class="textarea" id="tts-text" rows="6" placeholder="Enter text to speak... Use emotional tags like [laughing], [whispering], [sigh], [shouting], [sarcasm], [short pause], [medium pause]"></textarea>
+              <div style="display:flex;gap:8px;align-items:flex-start;">
+                <textarea class="textarea" id="tts-text" rows="6" placeholder="Enter text to speak... Use emotional tags like [laughing], [whispering], [sigh], [shouting], [sarcasm], [short pause], [medium pause]" style="flex:1;"></textarea>
+                <button class="btn btn-ghost btn-sm" id="btn-random-tts-text" title="Generate random speech text">🎲</button>
+              </div>
             </div>
             <div class="control-group" id="tts-prompt-group">
               <label>Style Direction (Gemini only)</label>

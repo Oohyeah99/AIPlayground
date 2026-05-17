@@ -19,11 +19,11 @@ const ImageGen = (() => {
 
   // Provider registry
   const providers = {
-    'flux-dev':     { type: 'comfyui', name: 'Flux Dev',           buildWorkflow: fluxWorkflow,        defaults: { steps: 20, cfg: 3.5 } },
-    'ernie-turbo':  { type: 'comfyui', name: 'ERNIE-Image Turbo',  buildWorkflow: ernieTurboWorkflow,  defaults: { steps: 8,  cfg: 1.0 } },
-    'imagen-fast':  { type: 'api', name: 'Imagen 4.0 Fast',  apiModel: 'imagen-4.0-fast-generate-001' },
-    'imagen':       { type: 'api', name: 'Imagen 4.0',       apiModel: 'imagen-4.0-generate-001' },
-    'imagen-ultra': { type: 'api', name: 'Imagen 4.0 Ultra', apiModel: 'imagen-4.0-ultra-generate-001' },
+    'flux-dev':     { type: 'comfyui', name: 'Flux Dev (ComfyUI)',           buildWorkflow: fluxWorkflow,        defaults: { steps: 20, cfg: 3.5 } },
+    'dalle3':       { type: 'api', name: 'OpenAI GPT Image',          apiModel: 'gpt-image-1' },
+    'imagen-fast':  { type: 'api', name: 'Google Imagen 4.0 Fast',  apiModel: 'imagen-4.0-fast-generate-001' },
+    'imagen':       { type: 'api', name: 'Google Imagen 4.0',       apiModel: 'imagen-4.0-generate-001' },
+    'imagen-ultra': { type: 'api', name: 'Google Imagen 4.0 Ultra', apiModel: 'imagen-4.0-ultra-generate-001' },
   };
 
   let generating = false;
@@ -39,20 +39,6 @@ const ImageGen = (() => {
       "5": { class_type: "EmptySD3LatentImage", inputs: { width, height, batch_size: 1 } },
       "6": { class_type: "KSampler", inputs: { model: ["1", 0], seed, steps, cfg, sampler_name: "euler", scheduler: "simple", positive: ["3", 0], negative: ["4", 0], latent_image: ["5", 0], denoise: 1.0 } },
       "7": { class_type: "VAELoader", inputs: { vae_name: "ae.safetensors" } },
-      "8": { class_type: "VAEDecode", inputs: { samples: ["6", 0], vae: ["7", 0] } },
-      "9": { class_type: "SaveImage", inputs: { images: ["8", 0], filename_prefix: "playground" } },
-    };
-  }
-
-  function ernieTurboWorkflow(prompt, width, height, steps, cfg, seed) {
-    return {
-      "1": { class_type: "UNETLoader", inputs: { unet_name: "ernie-image-turbo.safetensors", weight_dtype: "default" } },
-      "2": { class_type: "CLIPLoader", inputs: { clip_name: "ministral-3-3b.safetensors", type: "flux2" } },
-      "3": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 0], text: prompt } },
-      "4": { class_type: "ConditioningZeroOut", inputs: { conditioning: ["3", 0] } },
-      "5": { class_type: "EmptyFlux2LatentImage", inputs: { width, height, batch_size: 1 } },
-      "6": { class_type: "KSampler", inputs: { model: ["1", 0], seed, steps, cfg, sampler_name: "euler", scheduler: "simple", positive: ["3", 0], negative: ["4", 0], latent_image: ["5", 0], denoise: 1.0 } },
-      "7": { class_type: "VAELoader", inputs: { vae_name: "flux2-vae.safetensors" } },
       "8": { class_type: "VAEDecode", inputs: { samples: ["6", 0], vae: ["7", 0] } },
       "9": { class_type: "SaveImage", inputs: { images: ["8", 0], filename_prefix: "playground" } },
     };
@@ -98,9 +84,55 @@ const ImageGen = (() => {
     const data = await API.imagen(prompt, provider.apiModel, aspectRatio);
     if (!data.images?.length) throw new Error('No images returned');
 
-    // Display from local file
-    const imgUrl = `/outputs/${data.filename}`;
-    return { imgUrl, filename: data.filename, width: null, height: null, meta: `${provider.name} | ${aspectRatio}` };
+    const img = data.images[0];
+    let imgUrl;
+    let filename;
+
+    if (data.filename) {
+      // Server saved the file (Azure VM path)
+      imgUrl = `/outputs/${data.filename}`;
+      filename = data.filename;
+    } else {
+      // Vercel returns base64 — upload to Azure VM for persistence
+      filename = `imagen-${Date.now()}.${img.mimeType.includes('jpeg') ? 'jpg' : 'png'}`;
+      try {
+        await API.uploadMedia(filename, img.base64, img.mimeType);
+        imgUrl = `/outputs/${filename}`;
+      } catch (e) {
+        console.warn('[ImageGen] Upload failed, using base64 fallback:', e);
+        imgUrl = `data:${img.mimeType};base64,${img.base64}`;
+      }
+    }
+
+    return { imgUrl, filename, width: null, height: null, meta: `${provider.name} | ${aspectRatio}` };
+  }
+
+  async function generateDalle(provider, prompt) {
+    const aspectRatio = $aspectRatio.value;
+    $progress.querySelector('.progress-text').textContent = 'Generating with OpenAI GPT Image...';
+
+    const data = await API.dalle(prompt, provider.apiModel, aspectRatio);
+    if (!data.imageUrl && !data.imageBase64) throw new Error('No image returned');
+
+    let imgUrl;
+    let filename;
+
+    if (data.imageBase64) {
+      filename = `dalle-${Date.now()}.png`;
+      // Upload to Azure VM for persistence
+      try {
+        await API.uploadMedia(filename, data.imageBase64, 'image/png');
+        imgUrl = `/outputs/${filename}`;
+      } catch (e) {
+        console.warn('[ImageGen] Upload failed, using base64 fallback:', e);
+        imgUrl = `data:image/png;base64,${data.imageBase64}`;
+      }
+    } else {
+      imgUrl = data.imageUrl;
+      filename = `dalle-${Date.now()}.png`;
+    }
+
+    return { imgUrl, filename, width: null, height: null, meta: `${provider.name} | ${aspectRatio}` };
   }
 
   async function generate() {
@@ -115,30 +147,48 @@ const ImageGen = (() => {
     $progress.querySelector('.progress-text').textContent = 'Submitting...';
 
     const startTime = Date.now();
+    let provider;
     try {
-      const provider = providers[$provider.value];
+      provider = providers[$provider.value];
       if (!provider) throw new Error('Unknown provider: ' + $provider.value);
 
       let result;
-      if (provider.type === 'api') {
-        result = await generateImagen(provider, prompt);
-      } else {
+      if (provider.type === 'comfyui') {
         result = await generateComfyUI(provider, prompt);
+      } else if (provider.apiModel?.startsWith('dall-e')) {
+        result = await generateDalle(provider, prompt);
+      } else {
+        result = await generateImagen(provider, prompt);
       }
 
       const duration = Date.now() - startTime;
 
-      await API.saveGeneration({
-        type: 'image', prompt, width: result.width, height: result.height,
-        steps: result.steps || null, cfg: result.cfg || null, seed: result.seed || null,
-        provider: $provider.value,
-        filename: result.filename, duration_ms: duration, status: 'complete',
-      });
+      try {
+        await API.saveGeneration({
+          type: 'image', prompt, width: result.width, height: result.height,
+          steps: result.steps || null, cfg: result.cfg || null, seed: result.seed || null,
+          provider: $provider.value,
+          filename: result.filename, duration_ms: duration, status: 'complete',
+        });
+      } catch (saveErr) {
+        console.warn('[ImageGen] Save generation failed (non-fatal):', saveErr);
+      }
 
       addGalleryItem(result.imgUrl, prompt, `${result.meta} | ${(duration / 1000).toFixed(1)}s`);
     } catch (err) {
-      $progress.querySelector('.progress-text').textContent = `Error: ${err.message}`;
-      await new Promise(r => setTimeout(r, 3000));
+      console.error('[ImageGen] Error:', err);
+      const isApiProvider = provider?.type === 'api';
+      let errorMsg = err.message;
+      if (isApiProvider && errorMsg.includes('location')) {
+        errorMsg = 'Imagen is not available in your region (geographic restriction by Google). Use Flux Dev instead.';
+      }
+      $progress.querySelector('.progress-fill').classList.remove('indeterminate');
+      $progress.querySelector('.progress-fill').style.width = '0%';
+      $progress.querySelector('.progress-text').textContent = `Error: ${errorMsg}`;
+      $progress.querySelector('.progress-text').style.color = '#ef4444';
+      // Keep error visible for 10 seconds so user can read it
+      await new Promise(r => setTimeout(r, 10000));
+      $progress.querySelector('.progress-text').style.color = '';
     } finally {
       generating = false;
       $btnGen.disabled = false;
@@ -180,8 +230,8 @@ const ImageGen = (() => {
         $gallery.querySelector('.gallery-empty')?.remove();
         for (const item of items.reverse()) {
           if (item.filename && item.status === 'complete') {
-            // Imagen files are in /outputs/, ComfyUI files via proxy
-            const isLocal = item.filename.startsWith('imagen-');
+            // Local API files (imagen-, dalle-) are in /outputs/, ComfyUI files via proxy
+            const isLocal = item.filename.startsWith('imagen-') || item.filename.startsWith('dalle-');
             const url = isLocal ? `/outputs/${item.filename}` : await API.comfyuiDownloadUrl(item.filename);
             const meta = item.width ? `${item.width}x${item.height} | ${item.steps} steps | seed ${item.seed}` : (item.provider || 'Imagen');
             addGalleryItem(url, item.prompt, meta);
@@ -215,6 +265,24 @@ const ImageGen = (() => {
     $provider.addEventListener('change', onProviderChange);
     onProviderChange(); // Set initial state
     loadHistory();
+
+    // Random prompt button
+    const $btnRandom = document.getElementById('btn-random-img-prompt');
+    if ($btnRandom) {
+      $btnRandom.addEventListener('click', async () => {
+        $btnRandom.disabled = true;
+        $btnRandom.textContent = '...';
+        try {
+          const prompt = await API.randomPrompt('image');
+          if (prompt) $prompt.value = prompt;
+        } catch (e) {
+          console.warn('[ImageGen] Random prompt failed:', e);
+        } finally {
+          $btnRandom.disabled = false;
+          $btnRandom.textContent = '🎲';
+        }
+      });
+    }
   }
 
   return { init };

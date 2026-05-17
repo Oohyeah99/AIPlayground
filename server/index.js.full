@@ -855,7 +855,7 @@ app.post('/api/dalle', async (req, res) => {
   const { prompt, model, aspectRatio } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt is required' });
 
-  const modelId = model || 'dall-e-3';
+  const modelId = model || 'gpt-image-1';
 
   try {
     let data;

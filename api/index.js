@@ -345,11 +345,10 @@ async function handleDalle(req, res) {
           'Authorization': `Bearer ${key}`,
         },
         body: JSON.stringify({
-          model: model || 'dall-e-3',
+          model: model || 'gpt-image-1',
           prompt,
           n: 1,
           size,
-          response_format: 'b64_json',
         }),
         signal: AbortSignal.timeout(120000),
       });
@@ -366,7 +365,7 @@ async function handleDalle(req, res) {
       res.json({
         imageBase64: img.b64_json || null,
         imageUrl: img.url || null,
-        model: model || 'dall-e-3',
+        model: model || 'gpt-image-1',
         size,
       });
     } catch (e) {
